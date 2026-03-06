@@ -139,3 +139,5 @@ Security Onion proved effective for detecting malicious Modbus activity and high
 Durga Sai Sri Ramireddy </br>
 Master's Student - Cybersecurity </br>
 University of Houston
+
+*This project was developed as part of academic coursework and expanded for cybersecurity portfolio demonstration.*
